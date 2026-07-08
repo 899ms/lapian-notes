@@ -1,0 +1,625 @@
+﻿import type { Frame, Project, Segment, StoryLine, Subtitle } from '../types'
+import { narrativeOrders, segmentTypes } from '../types'
+import type { ScreenplayBlock } from '../types'
+import { segmentColors } from '../lib/project'
+import { secondsToTimecode } from '../lib/timecode'
+import { getSegmentProgress } from '../lib/segmentProgress'
+import { getSegmentQuality } from '../lib/segmentQuality'
+import { getProjectStoryLines, normalizeLineId } from '../lib/storyLines'
+import { matchScreenplayScenes, parseScreenplaySceneClues } from '../lib/screenplayResearch'
+
+interface InspectorPanelProps {
+  project: Project
+  selectedFrame?: Frame
+  selectedSegment?: Segment
+  selectedSegmentPosition?: { index: number; total: number }
+  boundaryFrame?: Frame
+  frames: Frame[]
+  hasFrameRangeStart: boolean
+  onProjectChange: (patch: Partial<Project>) => void
+  onStartSegmentRange: (frameId: string) => void
+  onEndSegmentRange: (frameId: string) => void
+  onClearSegmentRange: () => void
+  onFrameChange: (frameId: string, patch: Partial<Frame>) => void
+  onSegmentChange: (segmentId: string, patch: Partial<Segment>) => void
+  onSegmentNavigate: (direction: 'prev' | 'next') => void
+  onUseFrameAsSegmentBoundary: (segmentId: string, frame: Frame, boundary: 'start' | 'end') => void
+  onSegmentDelete: (segmentId: string) => void
+  onExportSegmentDeepDive: () => void
+}
+
+export function InspectorPanel(props: InspectorPanelProps) {
+  return (
+    <aside className="inspector">
+      <div className="panel-title">
+        <h2>编辑</h2>
+      </div>
+
+      {props.selectedSegment ? (
+        <SegmentInspector
+          frames={props.frames}
+          subtitles={props.project.subtitles}
+          screenplayResearch={props.project.screenplayResearch}
+          storyLines={getProjectStoryLines(props.project)}
+          segment={props.selectedSegment}
+          position={props.selectedSegmentPosition}
+          boundaryFrame={props.boundaryFrame}
+          onChange={(patch) => props.onSegmentChange(props.selectedSegment!.id, patch)}
+          onNavigate={props.onSegmentNavigate}
+          onUseFrameAsBoundary={(boundary) => {
+            if (!props.boundaryFrame) return
+            props.onUseFrameAsSegmentBoundary(props.selectedSegment!.id, props.boundaryFrame, boundary)
+          }}
+          onExportDeepDive={props.onExportSegmentDeepDive}
+          onDelete={() => props.onSegmentDelete(props.selectedSegment!.id)}
+        />
+      ) : props.selectedFrame ? (
+        <FrameInspector
+          frame={props.selectedFrame}
+          hasFrameRangeStart={props.hasFrameRangeStart}
+          onStartSegmentRange={() => props.onStartSegmentRange(props.selectedFrame!.id)}
+          onEndSegmentRange={() => props.onEndSegmentRange(props.selectedFrame!.id)}
+          onClearSegmentRange={props.onClearSegmentRange}
+          onChange={(patch) => props.onFrameChange(props.selectedFrame!.id, patch)}
+        />
+      ) : (
+        <ProjectManager project={props.project} onChange={props.onProjectChange} />
+      )}
+    </aside>
+  )
+}
+
+function ProjectManager({ project, onChange }: { project: Project; onChange: (patch: Partial<Project>) => void }) {
+  const mergedTitle = project.projectTitle || project.filmTitle
+  const totalSceneClues = parseScreenplaySceneClues(project.screenplayResearch, 200).length
+
+  return (
+    <section className="inspector-section">
+      <label className="field compact">
+        <span>项目名 / 影片名</span>
+        <input
+          value={mergedTitle}
+          onChange={(event) => onChange({ projectTitle: event.target.value, filmTitle: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        <span>拆解目标</span>
+        <input
+          value={project.learningGoal ?? ''}
+          placeholder="比如：把这部电影拆成按时间轴排列的文字剧本，并分析结构和节奏"
+          onChange={(event) => onChange({ learningGoal: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        <span>剧本/剧情资料</span>
+        <textarea
+          className="screenplay-research-input"
+          value={project.screenplayResearch ?? ''}
+          placeholder="粘贴或导入公开剧本、剧情梗概、访谈、影评资料或链接，AI 会结合这些资料还原时间轴文本。"
+          onChange={(event) => onChange({ screenplayResearch: event.target.value })}
+        />
+      </label>
+      {project.screenplayResearch?.trim() ? (
+        <div className="research-state">
+          已载入剧本/剧情资料约 {project.screenplayResearch.trim().length.toLocaleString()} 字
+          {totalSceneClues ? `，识别出 ${totalSceneClues} 个场景线索` : '，暂未识别到明确场景头'}。生成 AI 分析包时会一起提供给 AI。
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function FrameInspector({
+  frame,
+  hasFrameRangeStart,
+  onStartSegmentRange,
+  onEndSegmentRange,
+  onClearSegmentRange,
+  onChange,
+}: {
+  frame: Frame
+  hasFrameRangeStart: boolean
+  onStartSegmentRange: () => void
+  onEndSegmentRange: () => void
+  onClearSegmentRange: () => void
+  onChange: (patch: Partial<Frame>) => void
+}) {
+  return (
+    <section className="inspector-section">
+      <h3>时间点 {secondsToTimecode(frame.time)}</h3>
+      {frame.src ? (
+        <img className="preview-image" src={frame.src} alt="frame" />
+      ) : (
+        <div className="preview-image missing-preview">
+          <strong>{secondsToTimecode(frame.time)}</strong>
+          <span>当前帧暂无截图，需要重新选择电影后生成 AI 分析包。</span>
+        </div>
+      )}
+      <label className="field">
+        <span>备注</span>
+        <textarea value={frame.note ?? ''} onChange={(event) => onChange({ note: event.target.value })} />
+      </label>
+      <div className="frame-range-actions">
+        {hasFrameRangeStart ? (
+          <>
+            <button onClick={onEndSegmentRange}>设为段落终点并创建</button>
+            <button onClick={onClearSegmentRange}>清除起点</button>
+          </>
+        ) : (
+          <button onClick={onStartSegmentRange}>设为新段落起点</button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function SegmentInspector({
+  frames,
+  subtitles,
+  screenplayResearch,
+  storyLines,
+  segment,
+  position,
+  boundaryFrame,
+  onChange,
+  onNavigate,
+  onUseFrameAsBoundary,
+  onExportDeepDive,
+  onDelete,
+}: {
+  frames: Frame[]
+  subtitles: Subtitle[]
+  screenplayResearch?: string
+  storyLines: StoryLine[]
+  segment: Segment
+  position?: { index: number; total: number }
+  boundaryFrame?: Frame
+  onChange: (patch: Partial<Segment>) => void
+  onNavigate: (direction: 'prev' | 'next') => void
+  onUseFrameAsBoundary: (boundary: 'start' | 'end') => void
+  onExportDeepDive: () => void
+  onDelete: () => void
+}) {
+  const segmentSubtitles = subtitles.filter((subtitle) => subtitle.startTime <= segment.endTime && subtitle.endTime >= segment.startTime)
+  const progress = getSegmentProgress(segment)
+  const quality = getSegmentQuality(segment, frames, subtitles, frames.length > 1 ? frames[1].time - frames[0].time : 5)
+  const segmentMatchText = [
+    segment.title,
+    segment.screenplayDraft,
+    segment.keyBeats,
+    segmentSubtitles.map((subtitle) => subtitle.text).join(' '),
+  ].filter(Boolean).join('\n')
+  const sceneMatches = matchScreenplayScenes(screenplayResearch, segmentMatchText, position?.index ?? 0, position?.total ?? 1, 4)
+  const sceneClues = sceneMatches.map((match) => match.scene)
+  const allSceneClues = parseScreenplaySceneClues(screenplayResearch, 200)
+  const matchedSceneIds = segment.screenplaySceneIds ?? []
+  const matchedScenes = allSceneClues.filter((scene) => matchedSceneIds.includes(scene.index))
+  const primaryLine = normalizeLineId(segment.primaryLine, storyLines) ?? storyLines[0].id
+  const sharedLines = normalizeSharedLineIds(segment.sharedLines, primaryLine, storyLines)
+  const isShared = segment.isShared ?? sharedLines.length > 1
+
+  function updateBoundary(field: 'startFrameId' | 'endFrameId', frameId: string) {
+    const frame = frames.find((item) => item.id === frameId)
+    if (!frame) return
+    const patch: Partial<Segment> = { [field]: frameId }
+    if (field === 'startFrameId') {
+      patch.startTime = frame.time
+      if (frame.time > segment.endTime) {
+        patch.endFrameId = frame.id
+        patch.endTime = frame.time
+      }
+    }
+    if (field === 'endFrameId') {
+      patch.endTime = frame.time
+      if (frame.time < segment.startTime) {
+        patch.startFrameId = frame.id
+        patch.startTime = frame.time
+      }
+    }
+    onChange(patch)
+  }
+
+  function updatePrimaryLine(nextPrimaryLine: string) {
+    const nextSharedLines = normalizeSharedLineIds(sharedLines, nextPrimaryLine, storyLines)
+    onChange({
+      primaryLine: nextPrimaryLine,
+      sharedLines: nextSharedLines,
+      isShared: isShared || nextSharedLines.length > 1,
+    })
+  }
+
+  function updateSharedLine(lineId: string, checked: boolean) {
+    const nextSharedLines = normalizeSharedLineIds(
+      checked ? [...sharedLines, lineId] : sharedLines.filter((item) => item !== lineId),
+      primaryLine,
+      storyLines,
+    )
+    onChange({
+      sharedLines: nextSharedLines,
+      isShared: nextSharedLines.length > 1,
+    })
+  }
+
+  return (
+    <section className="inspector-section segment-form">
+      <div className="segment-nav">
+        <button disabled={!position || position.index <= 0} onClick={() => onNavigate('prev')}>上一段</button>
+        <h3>{position ? `第 ${position.index + 1}/${position.total} 段` : '当前段落'}</h3>
+        <button disabled={!position || position.index >= position.total - 1} onClick={() => onNavigate('next')}>下一段</button>
+      </div>
+      <div className="segment-time-title">{secondsToTimecode(segment.startTime)} - {secondsToTimecode(segment.endTime)}</div>
+      <div className="segment-progress">
+        <div>
+          <strong>完成度 {progress.percent}%</strong>
+          <span>{progress.completed}/{progress.total}</span>
+        </div>
+        <progress value={progress.completed} max={progress.total} />
+        {progress.missing.length ? (
+          <p>还缺字段：{progress.missing.slice(0, 4).join('、')}{progress.missing.length > 4 ? '…' : ''}</p>
+        ) : (
+          <p>当前段落字段完整，可直接用于导出。</p>
+        )}
+      </div>
+
+      <div className={`segment-quality ${quality.warnings.length ? 'warn' : 'ready'}`}>
+        <div>
+          <strong>段落诊断</strong>
+          <span>{secondsToTimecode(quality.duration)}｜画面 {quality.frameCount}｜字幕 {quality.subtitleCount}</span>
+        </div>
+        {quality.warnings.length ? (
+          <ul>
+            {quality.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        ) : (
+          <p>段落范围清晰，可继续补充剧本分析。</p>
+        )}
+      </div>
+
+      {sceneClues.length ? (
+        <section className="reference-scene-panel">
+          <div>
+            <strong>对应剧本/剧情场景</strong>
+            <span>{matchedScenes.length ? `已匹配 ${matchedScenes.length} 个场景` : '可先采用推荐场景，再人工核对。'}</span>
+          </div>
+          <label className="field compact">
+            <span>场景编号</span>
+            <input
+              value={matchedSceneIds.join('、')}
+              placeholder="比如：1、2、3"
+              onChange={(event) => onChange({ screenplaySceneIds: parseSceneIdInput(event.target.value) })}
+            />
+          </label>
+          <div className="reference-scene-actions">
+            <button
+              type="button"
+              onClick={() => onChange({
+                screenplaySceneIds: sceneMatches.map((match) => match.scene.index),
+                screenplaySceneNote: sceneMatches.map((match) => `${match.scene.index}. ${match.scene.heading}：${match.reason}`).join('\n'),
+              })}
+            >
+              采用推荐
+            </button>
+            <button type="button" onClick={() => onChange({ screenplaySceneIds: [], screenplaySceneNote: '' })}>清除匹配</button>
+          </div>
+          {matchedScenes.length ? (
+            <ol>
+              {matchedScenes.map((scene) => (
+                <li key={`${scene.index}-${scene.heading}`}>
+                  <strong>{scene.index}. {scene.heading}</strong>
+                  {scene.excerpt ? <p>{scene.excerpt}</p> : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          <ol>
+            {sceneMatches.map((match) => (
+              <li key={`${match.scene.index}-${match.scene.heading}`}>
+                <strong>{match.scene.index}. {match.scene.heading}</strong>
+                <span>匹配：{Math.round(match.score * 100)}%｜{match.reason}</span>
+                {match.scene.excerpt ? <p>{match.scene.excerpt}</p> : null}
+              </li>
+            ))}
+          </ol>
+          <TextArea
+            label="资料场景备注"
+            placeholder="记录为什么把这几个资料场景对应到当前电影段落，或标记待人工核对。"
+            value={segment.screenplaySceneNote}
+            onChange={(screenplaySceneNote) => onChange({ screenplaySceneNote })}
+          />
+        </section>
+      ) : null}
+
+      {boundaryFrame ? (
+        <div className="boundary-actions">
+          <span>当前时间点：{secondsToTimecode(boundaryFrame.time)}</span>
+          <button onClick={() => onUseFrameAsBoundary('start')}>设为起点</button>
+          <button onClick={() => onUseFrameAsBoundary('end')}>设为终点</button>
+        </div>
+      ) : null}
+
+      <div className="segment-boundary-grid">
+        <label className="field compact">
+          <span>起点</span>
+          <select value={segment.startFrameId} onChange={(event) => updateBoundary('startFrameId', event.target.value)}>
+            {frames.map((frame) => (
+              <option key={frame.id} value={frame.id}>{secondsToTimecode(frame.time)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field compact">
+          <span>终点</span>
+          <select value={segment.endFrameId} onChange={(event) => updateBoundary('endFrameId', event.target.value)}>
+            {frames.map((frame) => (
+              <option key={frame.id} value={frame.id}>{secondsToTimecode(frame.time)}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="field compact">
+        <span>标题</span>
+        <input value={segment.title} onChange={(event) => onChange({ title: event.target.value })} />
+      </label>
+      <label className="field compact">
+        <span>类型</span>
+        <select
+          value={segment.type}
+          onChange={(event) => {
+            const type = event.target.value as Segment['type']
+            onChange({ type, color: segmentColors[type] })
+          }}
+        >
+          {segmentTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+        </select>
+      </label>
+      <label className="field compact">
+        <span>叙事顺序</span>
+        <select value={segment.narrativeOrder ?? '顺叙'} onChange={(event) => onChange({ narrativeOrder: event.target.value as Segment['narrativeOrder'] })}>
+          {narrativeOrders.map((order) => <option key={order} value={order}>{order}</option>)}
+        </select>
+      </label>
+      <section className="shared-module-editor">
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            checked={isShared}
+            onChange={(event) => onChange({ isShared: event.target.checked, sharedLines })}
+          />
+          <span>是否多线复用</span>
+        </label>
+        <label className="field compact">
+          <span>主归属线</span>
+          <select value={primaryLine} onChange={(event) => updatePrimaryLine(event.target.value)}>
+            {storyLines.map((line) => <option key={line.id} value={line.id}>{line.title}</option>)}
+          </select>
+        </label>
+        <div className="field">
+          <span>复用线索</span>
+          <div className="shared-line-options">
+            {storyLines.map((line) => (
+              <label key={line.id} className="checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={sharedLines.includes(line.id)}
+                  disabled={line.id === primaryLine}
+                  onChange={(event) => updateSharedLine(line.id, event.target.checked)}
+                />
+                <span>{line.title}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <label className="field compact">
+          <span>重要性</span>
+          <select
+            value={segment.importance ?? 'normal'}
+            onChange={(event) => onChange({ importance: event.target.value as Segment['importance'] })}
+          >
+            <option value="normal">普通</option>
+            <option value="key">关键复用</option>
+            <option value="pivot">结构枢纽</option>
+          </select>
+        </label>
+        <TextArea
+          label="结构作用"
+          placeholder="说明这个模块为什么同时影响多条线索，或它在结构中承担的枢纽作用。"
+          value={segment.structureRole}
+          onChange={(structureRole) => onChange({ structureRole })}
+        />
+      </section>
+      <label className="field compact">
+        <span>置信度</span>
+        <input type="number" min={0} max={1} step={0.05} value={segment.confidence ?? 0} onChange={(event) => onChange({ confidence: Number(event.target.value) })} />
+      </label>
+
+      <section className="core-analysis-fields">
+        <div className="core-analysis-title">
+          <div>
+            <strong>核心分析</strong>
+            <span>先还原剧情文本，再拆成场景、动作、对白小节，并补结构节奏判断。</span>
+          </div>
+          <button
+            type="button"
+            title="只打包这一段的截图和字幕发给 AI，让 AI 拆到场与镜头级"
+            onClick={onExportDeepDive}
+          >
+            只导出本段给 AI
+          </button>
+        </div>
+        <p className="deep-dive-hint">
+          想把这一段拆到镜头级：点上方按钮生成只含本段的小包发给 AI（指令自动进剪贴板），AI
+          返回的 JSON 从「导入 AI 结果」导回，会自动填进这一段，不影响其它段落。
+        </p>
+        <TextArea
+          label="段落功能"
+          placeholder="这段在整部电影里承担什么作用？比如引出目标、制造冲突、升级危机、完成转折。"
+          value={segment.segmentFunction}
+          onChange={(segmentFunction) => onChange({ segmentFunction })}
+        />
+        <TextArea
+          label="关键节拍"
+          placeholder="按 1、2、3 写出这段发生了哪些关键动作、信息释放或情绪变化。"
+          value={segment.keyBeats}
+          onChange={(keyBeats) => onChange({ keyBeats })}
+        />
+        <TextArea
+          label="剧情文本 / 剧本还原"
+          placeholder="把这段还原成文字剧本：场景、人物、目标、阻碍、动作推进、结果。"
+          value={segment.screenplayDraft}
+          onChange={(screenplayDraft) => onChange({ screenplayDraft })}
+        />
+        <ScreenplayBlockEditor
+          blocks={segment.screenplayBlocks ?? []}
+          segment={segment}
+          onChange={(screenplayBlocks) => onChange({ screenplayBlocks })}
+        />
+        <TextArea
+          label="观众体验"
+          placeholder="观众在这段应该获得什么感受？比如好奇、紧张、理解、误判、共情或释放。"
+          value={segment.audienceExperience}
+          onChange={(audienceExperience) => onChange({ audienceExperience })}
+        />
+      </section>
+      <SubtitlePreview subtitles={segmentSubtitles} />
+      <details className="advanced-segment-fields">
+        <summary>高级字段（可选）</summary>
+        <TextArea label="创作意图" value={segment.creativeIntent} onChange={(creativeIntent) => onChange({ creativeIntent })} />
+        <TextArea label="信息控制" value={segment.informationControl} onChange={(informationControl) => onChange({ informationControl })} />
+        <TextArea label="节奏设计" value={segment.rhythmDesign} onChange={(rhythmDesign) => onChange({ rhythmDesign })} />
+        <TextArea label="手法" value={segment.techniques} onChange={(techniques) => onChange({ techniques })} />
+        <TextArea label="复用方法" value={segment.reusableMethod} onChange={(reusableMethod) => onChange({ reusableMethod })} />
+        <TextArea label="备注" value={segment.notes} onChange={(notes) => onChange({ notes })} />
+      </details>
+      <button className="danger-button" onClick={onDelete}>删除当前段落</button>
+    </section>
+  )
+}
+
+function parseSceneIdInput(value: string): number[] {
+  return [...new Set(value.split(/[、,\s]+/).map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0))]
+    .map((item) => Math.round(item))
+    .sort((a, b) => a - b)
+}
+
+function normalizeSharedLineIds(lines: string[] | undefined, primaryLine: string, storyLines: StoryLine[]): string[] {
+  const normalized = (lines ?? [])
+    .map((line) => normalizeLineId(line, storyLines))
+    .filter((line): line is string => Boolean(line))
+  return [...new Set([primaryLine, ...normalized])]
+}
+
+function ScreenplayBlockEditor({
+  blocks,
+  segment,
+  onChange,
+}: {
+  blocks: ScreenplayBlock[]
+  segment: Segment
+  onChange: (blocks: ScreenplayBlock[]) => void
+}) {
+  function updateBlock(id: string, patch: Partial<ScreenplayBlock>) {
+    onChange(blocks.map((block) => (block.id === id ? { ...block, ...patch } : block)))
+  }
+
+  function addBlock(type: ScreenplayBlock['type']) {
+    onChange([
+      ...blocks,
+      {
+        id: crypto.randomUUID(),
+        type,
+        time: segment.startTime,
+        text: '',
+      },
+    ])
+  }
+
+  function removeBlock(id: string) {
+    onChange(blocks.filter((block) => block.id !== id))
+  }
+
+  return (
+    <section className="screenplay-block-editor">
+      <div>
+        <strong>剧本小节</strong>
+        <span>{blocks.length ? `${blocks.length} 条；至少补动作或对白才算正文完整` : '可把段落拆成场景、动作、对白。'}</span>
+      </div>
+      {blocks.length ? (
+        <ol>
+          {blocks.map((block, index) => (
+            <li key={block.id}>
+              <div className="screenplay-block-row">
+                <select value={block.type} onChange={(event) => updateBlock(block.id, { type: event.target.value as ScreenplayBlock['type'] })}>
+                  {(['场景', '动作', '对白', '手语/字幕', '备注'] as const).map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+                <input
+                  type="number"
+                  min={Math.floor(segment.startTime)}
+                  max={Math.ceil(segment.endTime)}
+                  step={1}
+                  value={Math.round(block.time ?? segment.startTime)}
+                  onChange={(event) => updateBlock(block.id, { time: Number(event.target.value) })}
+                  aria-label={`第 ${index + 1} 条时间`}
+                />
+                <span>{secondsToTimecode(block.time ?? segment.startTime)}</span>
+                <button type="button" onClick={() => removeBlock(block.id)}>删除</button>
+              </div>
+              <textarea
+                value={block.text}
+                placeholder="写入场景头、动作描写、人物对白或手语/字幕提示。"
+                onChange={(event) => updateBlock(block.id, { text: event.target.value })}
+              />
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <div className="screenplay-block-actions">
+        <button type="button" onClick={() => addBlock('场景')}>加场景</button>
+        <button type="button" onClick={() => addBlock('动作')}>加动作</button>
+        <button type="button" onClick={() => addBlock('对白')}>加对白</button>
+      </div>
+    </section>
+  )
+}
+
+function SubtitlePreview({ subtitles }: { subtitles: Subtitle[] }) {
+  return (
+    <section className="subtitle-preview">
+      <div>
+        <span>段落内字幕</span>
+        <small>{subtitles.length ? `${subtitles.length} 条字幕` : '0 条字幕'}</small>
+      </div>
+      {subtitles.length ? (
+        <ol>
+          {subtitles.map((subtitle) => (
+            <li key={subtitle.id}>
+              <time>{secondsToTimecode(subtitle.startTime)}</time>
+              <p>{subtitle.text}</p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p>当前段落未匹配到字幕。可导入 SRT 或先手动填写文本感知。</p>
+      )}
+    </section>
+  )
+}
+
+function TextArea({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string
+  value?: string
+  placeholder?: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <textarea placeholder={placeholder} value={value ?? ''} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  )
+}
+
