@@ -30,13 +30,20 @@ export function Toolbar(props: ToolbarProps) {
           <span>① 电影</span>
           <button
             disabled={props.isTaskRunning}
-            title={props.project.sourceVideoName ? '换一部电影会开始一个新项目' : '选择电影文件,之后转码、抽帧、字幕、AI 分析包全自动'}
+            title={props.project.sourceVideoName ? '换一部电影会开始一个新项目' : '必选:选择电影文件,之后转码、抽帧、字幕、AI 分析包全自动'}
             onClick={props.onVideoPath}
           >
+            <em className="required-star">*</em>
             {props.project.sourceVideoName ? '更换电影' : '导入电影'}
           </button>
-          <button onClick={props.onSubtitle}>{props.project.subtitlePath ? '更换字幕' : '导入字幕'}</button>
-          <button onClick={props.onScreenplayResearch}>{props.project.screenplayResearch ? '更换剧情资料' : '导入剧情资料'}</button>
+          <button title="选填:没有会自动搜索网络字幕,搜不到也能纯画面分析" onClick={props.onSubtitle}>
+            {props.project.subtitlePath ? '更换字幕' : '导入字幕'}
+            <small className="optional-tag">选填</small>
+          </button>
+          <button title="选填:公开剧本、剧情梗概或影评,能让 AI 分析更准" onClick={props.onScreenplayResearch}>
+            {props.project.screenplayResearch ? '更换剧情资料' : '导入剧情资料'}
+            <small className="optional-tag">选填</small>
+          </button>
         </div>
 
         <div className="tool-section">

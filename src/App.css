@@ -212,6 +212,20 @@ textarea {
   line-height: 1.55;
 }
 
+.required-star {
+  margin-right: 3px;
+  color: #dc2626;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.optional-tag {
+  margin-left: 4px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 400;
+}
+
 .project-library-panel {
   max-width: 640px;
 }

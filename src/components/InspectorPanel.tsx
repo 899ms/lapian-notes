@@ -84,7 +84,7 @@ function ProjectManager({ project, onChange, onDelete }: { project: Project; onC
         />
       </label>
       <label className="field">
-        <span>拆解目标</span>
+        <span>拆解目标<small className="optional-tag">选填</small></span>
         <input
           value={project.learningGoal ?? ''}
           placeholder="比如：把这部电影拆成按时间轴排列的文字剧本，并分析结构和节奏"
@@ -92,7 +92,7 @@ function ProjectManager({ project, onChange, onDelete }: { project: Project; onC
         />
       </label>
       <label className="field">
-        <span>剧本/剧情资料</span>
+        <span>剧本/剧情资料<small className="optional-tag">选填</small></span>
         <textarea
           className="screenplay-research-input"
           value={project.screenplayResearch ?? ''}
