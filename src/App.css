@@ -212,6 +212,31 @@ textarea {
   line-height: 1.55;
 }
 
+.project-manage-footer {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.project-manage-footer p {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed #d9dde3;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.project-manage-footer button {
+  justify-self: start;
+}
+
+.tool-section-secondary {
+  opacity: 0.75;
+}
+
 .workflow-guide {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

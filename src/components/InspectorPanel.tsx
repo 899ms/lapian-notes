@@ -1,7 +1,7 @@
 ﻿import type { Frame, Project, Segment, StoryLine, Subtitle } from '../types'
 import { narrativeOrders, segmentTypes } from '../types'
 import type { ScreenplayBlock } from '../types'
-import { segmentColors } from '../lib/project'
+import { hasMeaningfulProjectContent, segmentColors } from '../lib/project'
 import { secondsToTimecode } from '../lib/timecode'
 import { getSegmentProgress } from '../lib/segmentProgress'
 import { getSegmentQuality } from '../lib/segmentQuality'
@@ -26,6 +26,7 @@ interface InspectorPanelProps {
   onUseFrameAsSegmentBoundary: (segmentId: string, frame: Frame, boundary: 'start' | 'end') => void
   onSegmentDelete: (segmentId: string) => void
   onExportSegmentDeepDive: () => void
+  onProjectDelete: () => void
 }
 
 export function InspectorPanel(props: InspectorPanelProps) {
@@ -63,13 +64,13 @@ export function InspectorPanel(props: InspectorPanelProps) {
           onChange={(patch) => props.onFrameChange(props.selectedFrame!.id, patch)}
         />
       ) : (
-        <ProjectManager project={props.project} onChange={props.onProjectChange} />
+        <ProjectManager project={props.project} onChange={props.onProjectChange} onDelete={props.onProjectDelete} />
       )}
     </aside>
   )
 }
 
-function ProjectManager({ project, onChange }: { project: Project; onChange: (patch: Partial<Project>) => void }) {
+function ProjectManager({ project, onChange, onDelete }: { project: Project; onChange: (patch: Partial<Project>) => void; onDelete: () => void }) {
   const mergedTitle = project.projectTitle || project.filmTitle
   const totalSceneClues = parseScreenplaySceneClues(project.screenplayResearch, 200).length
 
@@ -105,6 +106,12 @@ function ProjectManager({ project, onChange }: { project: Project; onChange: (pa
           {totalSceneClues ? `，识别出 ${totalSceneClues} 个场景线索` : '，暂未识别到明确场景头'}。生成 AI 分析包时会一起提供给 AI。
         </div>
       ) : null}
+      <div className="project-manage-footer">
+        <p>换一部电影：直接点顶部「更换电影」，会自动开始新项目。当前项目想留档就先点「保存」导出 ZIP。</p>
+        {hasMeaningfulProjectContent(project) ? (
+          <button className="danger-button" onClick={onDelete}>删除当前项目</button>
+        ) : null}
+      </div>
     </section>
   )
 }

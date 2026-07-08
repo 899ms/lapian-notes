@@ -59,7 +59,7 @@ export function WorkflowGuide(props: WorkflowGuideProps) {
       index: 4,
       title: '拉片精修',
       description:
-        '点时间轴上的段落写笔记。想拆得更细：在右侧编辑面板点「只导出本段给 AI」，把这一段单独发给 AI 深拆，返回的 JSON 照第 3 步导回，会自动填进该段。完成后导出 Markdown。',
+        '点时间轴上的段落写笔记。想拆得更细：在右侧编辑面板点「只导出本段给 AI」，把这一段单独发给 AI 深拆，返回的 JSON 照第 3 步导回，会自动填进该段。完成后导出 Markdown。换下一部电影：直接点顶部「更换电影」。',
       state: hasSegments ? 'current' : 'todo',
       action: hasSegments
         ? { label: '导出 Markdown', onClick: props.onExportMarkdown }

@@ -4,8 +4,6 @@ import { hasMeaningfulProjectContent } from '../lib/project'
 interface ToolbarProps {
   project: Project
   isTaskRunning: boolean
-  onNewProject: () => void
-  onDeleteProject: () => void
   onOpenProjectPackage: () => void
   onSaveProjectPackage: () => void
   onVideoPath: () => void
@@ -29,24 +27,20 @@ export function Toolbar(props: ToolbarProps) {
       </div>
       <div className="tool-groups">
         <div className="tool-section">
-          <span>项目</span>
-          <button onClick={props.onNewProject}>新建</button>
-          <button title="打开保存的 ZIP 项目或旧 JSON 项目" onClick={props.onOpenProjectPackage}>打开项目</button>
-          <button disabled={!hasExportableContent} onClick={props.onSaveProjectPackage}>
-            保存项目
+          <span>① 电影</span>
+          <button
+            disabled={props.isTaskRunning}
+            title={props.project.sourceVideoName ? '换一部电影会开始一个新项目' : '选择电影文件,之后转码、抽帧、字幕、AI 分析包全自动'}
+            onClick={props.onVideoPath}
+          >
+            {props.project.sourceVideoName ? '更换电影' : '导入电影'}
           </button>
-          <button className="danger-button" disabled={!hasExportableContent} onClick={props.onDeleteProject}>删除项目</button>
-        </div>
-
-        <div className="tool-section">
-          <span>素材</span>
-          <button disabled={props.isTaskRunning} onClick={props.onVideoPath}>{props.project.sourceVideoName ? '更换电影' : '导入电影'}</button>
           <button onClick={props.onSubtitle}>{props.project.subtitlePath ? '更换字幕' : '导入字幕'}</button>
-          <button onClick={props.onScreenplayResearch}>{props.project.screenplayResearch ? '更换剧本/剧情资料' : '导入剧本/剧情资料'}</button>
+          <button onClick={props.onScreenplayResearch}>{props.project.screenplayResearch ? '更换剧情资料' : '导入剧情资料'}</button>
         </div>
 
         <div className="tool-section">
-          <span>AI</span>
+          <span>② AI 分析</span>
           <button disabled={!canGenerateAiPackage} onClick={props.onGenerateAiPackage}>
             生成 AI 分析包
           </button>
@@ -54,9 +48,17 @@ export function Toolbar(props: ToolbarProps) {
         </div>
 
         <div className="tool-section">
-          <span>导出</span>
+          <span>③ 导出</span>
           <button disabled={!hasExportableContent} onClick={props.onExportMarkdown}>导出 Markdown</button>
           <button disabled={!props.project.segments.length} onClick={props.onExportScreenplay}>导出剧本正文</button>
+        </div>
+
+        <div className="tool-section tool-section-secondary">
+          <span>项目文件</span>
+          <button title="打开保存的项目 ZIP,继续之前的拉片" onClick={props.onOpenProjectPackage}>打开</button>
+          <button disabled={!hasExportableContent} title="把当前项目导出为自包含 ZIP(笔记+截图),备份或换电脑用" onClick={props.onSaveProjectPackage}>
+            保存
+          </button>
         </div>
       </div>
     </header>

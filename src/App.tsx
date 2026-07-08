@@ -203,34 +203,8 @@ export default function App() {
     setFrameRangeEndId(endFrameId ?? startFrameId)
   }
 
-  async function handleNewProject() {
-    const name = window.prompt('项目名称', DEFAULT_PROJECT_TITLE)
-    if (!name) return
-    if (extractAbort) {
-      extractAbort.abort()
-      setExtractAbort(null)
-    }
-    taskAbortRef.current?.abort()
-    taskAbortRef.current = null
-    if (analysisAbort) {
-      analysisAbort.abort()
-      setAnalysisAbort(null)
-    }
-    revokeFrameObjectUrls(project.frames)
-    setProject(createEmptyProject(name, name))
-    setStatus(`已新建项目：${name}`)
-    setSelection({ kind: 'none' })
-    resetSelection()
-    setMarkdownPreview(null)
-    setAiImportText('')
-    setIsAiImportOpen(false)
-    clearVideoFileReference()
-    clearAutosave()
-    setLastSavedAt(null)
-  }
-
   function handleDeleteProject() {
-    if (!window.confirm('删除当前项目后将清空项目内容、字幕和帧图数据，是否继续？')) return
+    if (!window.confirm('删除当前项目后将清空项目内容、字幕和帧图数据，是否继续？想换电影不用删除，直接点「更换电影」即可。')) return
     const deletingProjectId = project.id
     clearProjectFrameImages(deletingProjectId).catch(() => {
       updateStatus('清理项目缓存图片失败。')
@@ -477,7 +451,7 @@ export default function App() {
     const willReplaceCurrentProject = Boolean(project.sourceVideoName || project.frames.length || project.subtitles.length || project.segments.length || project.macroAnalysis)
     if (
       willReplaceCurrentProject &&
-      !window.confirm('导入新电影会清空当前时间轴、字幕、段落和分析内容。建议先保存项目。是否继续？')
+      !window.confirm('导入新电影会开始一个新项目，当前的时间轴、字幕、段落和分析会被清空。想保留当前项目：先点「取消」，再点右上角「保存」导出 ZIP。确定换电影？')
     ) {
       e.target.value = ''
       return
@@ -1115,8 +1089,6 @@ export default function App() {
       <Toolbar
         project={project}
         isTaskRunning={isTaskRunning}
-        onNewProject={handleNewProject}
-        onDeleteProject={handleDeleteProject}
         onOpenProjectPackage={() => pkgInputRef.current?.click()}
         onSaveProjectPackage={handleSaveProjectPackage}
         onVideoPath={() => videoInputRef.current?.click()}
@@ -1188,6 +1160,7 @@ export default function App() {
           onUseFrameAsSegmentBoundary={handleUseFrameAsSegmentBoundary}
           onSegmentDelete={handleSegmentDelete}
           onExportSegmentDeepDive={handleExportSegmentDeepDive}
+          onProjectDelete={handleDeleteProject}
         />
       </section>
 
